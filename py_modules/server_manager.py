@@ -1,4 +1,4 @@
-﻿# server_manager.py - Freedeck 本地 HTTP 服务管理
+# server_manager.py - Freedeck 本地 HTTP 服务管理
 
 from __future__ import annotations
 
@@ -241,6 +241,15 @@ async def load_settings(plugin: Any) -> None:
         plugin.server_port = _normalize_port(settings.get(plugin.SETTING_PORT, config.DEFAULT_SERVER_PORT))
     except Exception:
         plugin.server_port = config.DEFAULT_SERVER_PORT
+
+    # 旧版本默认端口迁移到当前默认端口（20064），避免遗留设置导致端口冲突。
+    legacy_default_port = 0xE787
+    if int(getattr(plugin, "server_port", 0) or 0) == legacy_default_port:
+        plugin.server_port = config.DEFAULT_SERVER_PORT
+        try:
+            await save_settings(plugin)
+        except Exception:
+            pass
 
     download_dir = settings.get(plugin.SETTING_DOWNLOAD_DIR, config.DOWNLOADS_DIR)
     if isinstance(download_dir, str) and download_dir.strip():
