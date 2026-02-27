@@ -1,7 +1,7 @@
 {
   "name": "Freedeck",
-  "version": "0.1.0",
-  "description": "一站式管理学习版游戏",
+  "version": "0.2",
+  "description": "学习版游戏平台",
   "type": "module",
   "scripts": {
     "build": "rollup -c",
@@ -15,12 +15,12 @@
   "keywords": [
     "decky",
     "plugin",
-    "freedeck",
+    "plugin-template",
     "steam-deck",
     "deck"
   ],
-  "author": "Panyiwei",
-  "license": "LGPL-2.1",
+  "author": "You <you@you.tld>",
+  "license": "BSD-3-Clause",
   "bugs": {
     "url": "https://github.com/SteamDeckHomebrew/decky-plugin-template/issues"
   },
@@ -28,7 +28,7 @@
   "devDependencies": {
     "@decky/rollup": "^1.0.2",
     "@decky/ui": "^4.11.0",
-    "@rollup/rollup-linux-x64-musl": "^4.53.3",
+    "@rollup/rollup-linux-x64-gnu": "^4.53.3",
     "@types/react": "19.1.1",
     "@types/react-dom": "19.1.1",
     "@types/webpack": "^5.28.5",
