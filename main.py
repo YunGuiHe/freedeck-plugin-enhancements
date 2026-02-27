@@ -1,4 +1,4 @@
-﻿# main.py - Freedeck 插件入口
+# main.py - Freedeck 插件入口
 #
 # 只保留天翼下载与本地网页服务所需能力。
 
@@ -197,6 +197,10 @@ class Plugin:
         page_size: int = 50,
         auto_delete_package: bool = False,
         auto_install: bool = True,
+        lsfg_enabled=None,
+        show_playtime_widget=None,
+        steamgriddb_enabled=None,
+        steamgriddb_api_key=None,
     ) -> dict:
         """保存天翼下载设置。"""
         try:
@@ -207,6 +211,14 @@ class Plugin:
                 page_size = int(payload.get("page_size", page_size))
                 auto_delete_package = bool(payload.get("auto_delete_package", auto_delete_package))
                 auto_install = bool(payload.get("auto_install", auto_install))
+                if "lsfg_enabled" in payload:
+                    lsfg_enabled = bool(payload.get("lsfg_enabled"))
+                if "show_playtime_widget" in payload:
+                    show_playtime_widget = bool(payload.get("show_playtime_widget"))
+                if "steamgriddb_enabled" in payload:
+                    steamgriddb_enabled = bool(payload.get("steamgriddb_enabled"))
+                if "steamgriddb_api_key" in payload:
+                    steamgriddb_api_key = str(payload.get("steamgriddb_api_key", "") or "")
             elif isinstance(payload, str) and not download_dir:
                 download_dir = payload
 
@@ -217,9 +229,56 @@ class Plugin:
                 page_size=page_size,
                 auto_delete_package=auto_delete_package,
                 auto_install=auto_install,
+                lsfg_enabled=lsfg_enabled,
+                show_playtime_widget=show_playtime_widget,
+                steamgriddb_enabled=steamgriddb_enabled,
+                steamgriddb_api_key=steamgriddb_api_key,
             )
             return {"status": "success", "data": data}
         except Exception as exc:
+            return {"status": "error", "message": str(exc), "data": {}}
+
+    async def cancel_tianyi_task(self, payload=None, task_id: str = "") -> dict:
+        """取消下载任务并从列表移除。"""
+        try:
+            config.logger.info("Decky callable: cancel_tianyi_task")
+            if isinstance(payload, dict):
+                task_id = str(payload.get("task_id", task_id))
+            data = await self._get_tianyi_service().cancel_task(task_id)
+            return {"status": "success", "data": data}
+        except asyncio.CancelledError:
+            config.logger.warning("Decky callable cancel_tianyi_task cancelled")
+            return {"status": "error", "message": "取消操作被中断", "data": {}}
+        except Exception as exc:
+            config.logger.exception("Decky callable cancel_tianyi_task failed: %s", exc)
+            return {"status": "error", "message": str(exc), "data": {}}
+
+    async def clear_tianyi_inactive_tasks(self, payload=None) -> dict:
+        """清除所有状态不处于下载中的任务及可能的本地残留文件。"""
+        try:
+            config.logger.info("Decky callable: clear_tianyi_inactive_tasks")
+            data = await self._get_tianyi_service().clear_inactive_tasks()
+            return {"status": "success", "data": data}
+        except asyncio.CancelledError:
+            config.logger.warning("Decky callable clear_tianyi_inactive_tasks cancelled")
+            return {"status": "error", "message": "清理操作被中断", "data": {}}
+        except Exception as exc:
+            config.logger.exception("Decky callable clear_tianyi_inactive_tasks failed: %s", exc)
+            return {"status": "error", "message": str(exc), "data": {}}
+
+    async def cancel_tianyi_install(self, payload=None, task_id: str = "") -> dict:
+        """取消安装流程（解压/导入），用于面板终止安装进度。"""
+        try:
+            config.logger.info("Decky callable: cancel_tianyi_install")
+            if isinstance(payload, dict):
+                task_id = str(payload.get("task_id", task_id))
+            data = await self._get_tianyi_service().cancel_install(task_id)
+            return {"status": "success", "data": data}
+        except asyncio.CancelledError:
+            config.logger.warning("Decky callable cancel_tianyi_install cancelled")
+            return {"status": "error", "message": "取消安装操作被中断", "data": {}}
+        except Exception as exc:
+            config.logger.exception("Decky callable cancel_tianyi_install failed: %s", exc)
             return {"status": "error", "message": str(exc), "data": {}}
 
     async def uninstall_tianyi_installed_game(
@@ -241,14 +300,6 @@ class Plugin:
                 install_path=install_path,
                 delete_files=delete_files,
             )
-            return {"status": "success", "data": data}
-        except Exception as exc:
-            return {"status": "error", "message": str(exc), "data": {}}
-
-    async def clear_tianyi_inactive_tasks(self) -> dict:
-        """清理已完结或失败的天翼任务及残留文件。"""
-        try:
-            data = await self._get_tianyi_service().clear_inactive_tasks()
             return {"status": "success", "data": data}
         except Exception as exc:
             return {"status": "error", "message": str(exc), "data": {}}
@@ -400,4 +451,48 @@ class Plugin:
             )
             return {"status": "success", "data": data}
         except Exception as exc:
+            return {"status": "error", "message": str(exc), "data": {}}
+
+    async def get_tianyi_catalog_version(self) -> dict:
+        """获取当前游戏目录 CSV 版本日期。"""
+        try:
+            config.logger.info("Decky callable: get_tianyi_catalog_version")
+            data = await self._get_tianyi_service().get_catalog_version()
+            return {"status": "success", "data": data}
+        except asyncio.CancelledError:
+            config.logger.warning("Decky callable get_tianyi_catalog_version cancelled")
+            return {"status": "error", "message": "操作已取消", "data": {}}
+        except Exception as exc:
+            config.logger.exception("Decky callable get_tianyi_catalog_version failed: %s", exc)
+            return {"status": "error", "message": str(exc), "data": {}}
+
+    async def update_tianyi_catalog(self) -> dict:
+        """检查并更新游戏目录 CSV（从 GitHub 获取）。"""
+        try:
+            config.logger.info("Decky callable: update_tianyi_catalog")
+            data = await self._get_tianyi_service().update_catalog_from_github()
+            return {"status": "success", "data": data}
+        except asyncio.CancelledError:
+            config.logger.warning("Decky callable update_tianyi_catalog cancelled")
+            return {"status": "error", "message": "更新操作被中断", "data": {}}
+        except Exception as exc:
+            config.logger.exception("Decky callable update_tianyi_catalog failed: %s", exc)
+            return {"status": "error", "message": str(exc), "data": {}}
+
+    async def import_tianyi_task_to_steam(self, payload=None, task_id: str = "", exe_rel_path: str = "") -> dict:
+        """为已安装任务选择启动程序并导入 Steam（用于自定义源等多 exe 场景）。"""
+        try:
+            if isinstance(payload, dict):
+                task_id = str(payload.get("task_id", task_id))
+                exe_rel_path = str(payload.get("exe_rel_path", exe_rel_path))
+            data = await self._get_tianyi_service().import_task_to_steam(
+                task_id=task_id,
+                exe_rel_path=exe_rel_path,
+            )
+            return {"status": "success", "data": data}
+        except asyncio.CancelledError:
+            config.logger.warning("Decky callable import_tianyi_task_to_steam cancelled")
+            return {"status": "error", "message": "操作已取消", "data": {}}
+        except Exception as exc:
+            config.logger.exception("Decky callable import_tianyi_task_to_steam failed: %s", exc)
             return {"status": "error", "message": str(exc), "data": {}}
