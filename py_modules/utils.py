@@ -1,4 +1,4 @@
-﻿# utils.py - Freedeck 通用工具
+# utils.py - Freedeck 通用工具
 
 import asyncio
 import os

@@ -1,4 +1,4 @@
-﻿# seven_zip_manager.py - 7z 解压运行时管理
+# seven_zip_manager.py - 7z 解压运行时管理
 #
 # 该模块负责定位 7z 可执行文件并执行解压，支持进度回调。
 
@@ -8,12 +8,17 @@ import os
 import re
 import shutil
 import subprocess
+import threading
 from pathlib import Path
 from typing import Callable, List, Optional, Sequence
 
 
 class SevenZipError(RuntimeError):
     """7z 相关异常。"""
+
+
+class SevenZipCancelledError(SevenZipError):
+    """7z 解压被取消。"""
 
 
 class SevenZipManager:
@@ -53,6 +58,7 @@ class SevenZipManager:
         archive_path: str,
         output_dir: str,
         progress_cb: Optional[Callable[[float], None]] = None,
+        cancel_event: Optional[threading.Event] = None,
     ) -> None:
         """执行解压流程。"""
         archive = os.path.realpath(os.path.expanduser((archive_path or "").strip()))
@@ -61,6 +67,8 @@ class SevenZipManager:
             raise SevenZipError(f"待解压文件不存在: {archive_path}")
         if not target:
             raise SevenZipError("安装目录无效")
+        if cancel_event is not None and cancel_event.is_set():
+            raise SevenZipCancelledError("解压已取消")
         os.makedirs(target, exist_ok=True)
 
         binary = self._resolve_binary_path()
@@ -93,10 +101,44 @@ class SevenZipManager:
         except Exception as exc:
             raise SevenZipError(f"启动 7z 失败: {exc}") from exc
 
+        if cancel_event is not None:
+            def _watch_cancel() -> None:
+                while True:
+                    try:
+                        if process.poll() is not None:
+                            return
+                    except Exception:
+                        return
+                    try:
+                        if cancel_event.wait(timeout=0.25):
+                            break
+                    except Exception:
+                        return
+                try:
+                    if process.poll() is not None:
+                        return
+                    try:
+                        process.terminate()
+                    except Exception:
+                        pass
+                    try:
+                        process.wait(timeout=3.0)
+                    except Exception:
+                        try:
+                            process.kill()
+                        except Exception:
+                            pass
+                except Exception:
+                    return
+
+            threading.Thread(target=_watch_cancel, name="freedeck_7z_cancel", daemon=True).start()
+
         percent_re = re.compile(r"(\d{1,3})%")
         output_tail: List[str] = []
         if process.stdout is not None:
             for line in process.stdout:
+                if cancel_event is not None and cancel_event.is_set():
+                    break
                 text = line.strip()
                 if text:
                     output_tail.append(text)
@@ -110,6 +152,8 @@ class SevenZipManager:
                         pass
 
         return_code = process.wait()
+        if cancel_event is not None and cancel_event.is_set():
+            raise SevenZipCancelledError("解压已取消")
         if return_code != 0:
             hint = " | ".join(output_tail[-6:]) if output_tail else "no output"
             raise SevenZipError(f"7z 解压失败，exit={return_code}，诊断={hint}")
